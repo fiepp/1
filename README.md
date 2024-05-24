@@ -4,44 +4,20 @@ import graph.core.*;
 import graph.util.DLinkedList;
 
 
-/**
- * Implementation of a simple undirected graph using adjacency list.
- * <ul>
- *   <li>Edges are undirected.</li>
- *   <li>Self loop edges are not allowed.</li>
- *   <li>Parallel edges are not allowed.</li>
- * </ul>
- * The design of this class:
- * <ul>
- *   <li>Use {@code AdjVertex} to store each vertex. Each vertex has
- *   an internal linked-list to store edges which connected tos this vertex.
- *   </li>
- *   <li>Use {@code AdjEdge} to store each edge. Each edge has information of vertex position.
- *   So it's easy to lookup vertex from edge, only take O(1) time.
- *   </li>
- * </ul>
- *
- * @param <V> generic type for vertex
- * @param <E> generic type for edge
- */
 public class AdjacencyListGraph<V, E> implements IGraph<V, E> {
 /**
  * Internal class to store vertex.
- * <p>
- * members introduction:
- * <ul>
- *   <li>{@code value} store the element of vertex.</li>
- *   <li>{@code node} store the position of vertex in vertex list, aka {@code vertices}</li>
- *   <li>{@code affiliate} store the position of edge in edge list.</li>
- * </ul>
  */
-class AdjVertex implements IVertex<V> {
+class AdjacentListVertex implements IVertex<V> {
+  // element stored in vertex
   V element;
+  // position in list `vertices`
   IPosition<IVertex<V>> vertexPosition;
+  // list of edges connected to this vertex
   IList<IPosition<IEdge<E>>> edgePosition = new DLinkedList<>();
 
   // constructor
-  public AdjVertex(V v) {
+  public AdjacentListVertex(V v) {
     element = v;
   }
 
@@ -54,61 +30,46 @@ class AdjVertex implements IVertex<V> {
   // comparison function fo vertex
   @Override
   public boolean equals(Object o) {
-    if (o != null && o.getClass() == AdjVertex.class) {
-      var vertex = (AdjVertex) o;
+    if (o != null && o.getClass() == AdjacentListVertex.class) {
+      var vertex = (AdjacentListVertex) o;
       return vertex.element == element;
     }
     return false;
   }
+}
 
-  @Override
-  public String toString() {
-    var sb = new StringBuilder();
-    sb.append("{value:");
-    sb.append(element);
-    sb.append(", connected edges:[");
-    var it = edgePosition.iterator();
-    var sep = "";
-    while (it.hasNext()) {
-      var edge = it.next().element();
-      sb.append(sep);
-      sb.append(edge.element());
-      sep = ",";
-    }
-    sb.append("]}");
-    return sb.toString();
-  }
+/**
+ * Internal class to store position of vertex used by Edge.
+ * It is used to store the position of vertex in vertex list and
+ * current edge's position in affiliated vertex list's edge list.
+ * Link relationship between vertex and edge like this:
+ * If there is an edge between V1 and V2 linked by E1, then
+ * 1. V1 will have E1 in its edge list and
+ * 2. V2 will have E1 in its edge list and
+ * 3. E1 will have V1 and V2 in its src and dst respectively.
+ */
+class Position {
+  // Vertex position in vertex list
+  IPosition<IVertex<V>> vertexPosition;
+  // Edge position in vertex affiliated list
+  IPosition<IPosition<IEdge<E>>> edgePosition;
 }
 
 /**
  * Internal class to store edge.
- * <p>
- * members introduction:
- * <ul>
- *   <li>{@code element} store the element of edge.</li>
- *   <li>{@code node} store the position of edge in edge list, aka {@code edges}</li>
- *   <li>{@code srdHeadPosition} store the position of source vertex in vertex list, aka {@code vertices}</li>
- *   <li>{@code srcpos} store the position of edge in source vertex's affiliate list.</li>
- *   <li>{@code dst} store the position of destination vertex in vertex list, aka {@code vertices}</li>
- *   <li>{@code dstpos} store the position of edge in destination vertex's affiliate list.</li>
- * </ul>
  */
-class AdjEdge implements IEdge<E> {
+class AdjacentListEdge implements IEdge<E> {
   E element;
   // position in list `edges`
   IPosition<IEdge<E>> edgeIPosition;
 
-  // vertices connected to this edge
-  IPosition<IVertex<V>> srcVertexPosition;
-  IPosition<IPosition<IEdge<E>>> meInSrcListPosition;
-
-  IPosition<IVertex<V>> dstVertexPosition;
-  IPosition<IPosition<IEdge<E>>> meInDstListPosition;
+  Position src = new Position();
+  Position dst = new Position();
 
   // constructor
-  AdjEdge(E e, AdjVertex srcVertexPosition, AdjVertex dstVertexPosition) {
-    this.srcVertexPosition = srcVertexPosition.vertexPosition;
-    this.dstVertexPosition = dstVertexPosition.vertexPosition;
+  AdjacentListEdge(E e, AdjacentListVertex srcVertexPosition, AdjacentListVertex dstVertexPosition) {
+    this.src.vertexPosition = srcVertexPosition.vertexPosition;
+    this.dst.vertexPosition = dstVertexPosition.vertexPosition;
     element = e;
   }
 
@@ -119,16 +80,14 @@ class AdjEdge implements IEdge<E> {
 
   @Override
   public boolean equals(Object o) {
-    if (o != null && o.getClass() == AdjEdge.class) {
-      var edge = (AdjEdge) o;
-      return (edge.srcVertexPosition.element() == srcVertexPosition.element() && edge.dstVertexPosition.element() == dstVertexPosition.element()) || (edge.srcVertexPosition.element() == dstVertexPosition.element() && edge.dstVertexPosition.element() == srcVertexPosition.element());
+    if (o != null && o.getClass() == AdjacentListEdge.class) {
+      var edge = (AdjacentListEdge) o;
+      return (edge.src.vertexPosition.element() == src.vertexPosition.element()
+          && edge.dst.vertexPosition.element() == dst.vertexPosition.element())
+          || (edge.src.vertexPosition.element() == dst.vertexPosition.element()
+          && edge.dst.vertexPosition.element() == src.vertexPosition.element());
     }
     return false;
-  }
-
-  @Override
-  public String toString() {
-    return "{element:" + element + ", src:" + srcVertexPosition.element() + ", dst:" + dstVertexPosition.element() + "}";
   }
 }
 
@@ -142,26 +101,25 @@ private final IList<IEdge<E>> edges = new DLinkedList<>();
  *
  * @param e An edge.
  * @return An array (of length 2) containing the two end vertices of {@code e}.
- * In case of error, return an array of two {@code null} elements.
  */
 @Override
 public IVertex<V>[] endVertices(IEdge<E> e) {
   // convert e to AdjEdge
-  var edge = (AdjEdge) e;
+  var edge = (AdjacentListEdge) e;
 
   // create new array of length 2 that will contain
   // the edge's end vertices
   @SuppressWarnings("unchecked") IVertex<V>[] endpoints = new IVertex[2];
 
   // check if edge is valid
-  if (invalidEdge(edge)) {
+  if (edgeError(edge)) {
     endpoints[0] = endpoints[1] = null;
     return endpoints;
   }
 
   // fill array
-  endpoints[0] = edge.srcVertexPosition.element();
-  endpoints[1] = edge.dstVertexPosition.element();
+  endpoints[0] = edge.src.vertexPosition.element();
+  endpoints[1] = edge.dst.vertexPosition.element();
   return endpoints;
 }
 
@@ -171,23 +129,22 @@ public IVertex<V>[] endVertices(IEdge<E> e) {
  *
  * @param v The vertex to begin at.
  * @param e The edge to travel along.
- * @return The vertex opposite {@code v} along edge {@code e}. In case of error,
- * return {@code null}.
+ * @return The vertex opposite {@code v} along edge {@code e}.
  */
 @Override
 public IVertex<V> opposite(IVertex<V> v, IEdge<E> e) {
   // convert v and e to AdjVertex and AdjEdge
-  var edge = (AdjEdge) e;
-  var vertex = (AdjVertex) v;
+  var edge = (AdjacentListEdge) e;
+  var vertex = (AdjacentListVertex) v;
 
   // sanity check
-  if (invalidEdge(edge) || invalidVertex(vertex)) return null;
+  if (edgeError(edge) || vertexError(vertex)) return null;
 
   // check relationship between vertex and edge
-  if (edge.srcVertexPosition.element() == vertex) {
-    return edge.dstVertexPosition.element();
-  } else if (edge.dstVertexPosition.element() == vertex) {
-    return edge.srcVertexPosition.element();
+  if (edge.src.vertexPosition.element() == vertex) {
+    return edge.dst.vertexPosition.element();
+  } else if (edge.dst.vertexPosition.element() == vertex) {
+    return edge.src.vertexPosition.element();
   }
   return null;
 }
@@ -204,16 +161,16 @@ public IVertex<V> opposite(IVertex<V> v, IEdge<E> e) {
 @Override
 public boolean areAdjacent(IVertex<V> v, IVertex<V> w) {
   // convert v and w to AdjVertex
-  var src = (AdjVertex) v;
-  var dst = (AdjVertex) w;
+  var src = (AdjacentListVertex) v;
+  var dst = (AdjacentListVertex) w;
 
   // sanity check
-  if (invalidVertex(src) || invalidVertex(dst)) return false;
+  if (vertexError(src) || vertexError(dst)) return false;
 
-  var it = src.edgePosition.iterator();
-  while (it.hasNext()) {
-    var edge = (AdjEdge) it.next().element();
-    if (edge.srcVertexPosition.element() == dst || edge.dstVertexPosition.element() == dst) {
+  var curr = src.edgePosition.iterator();
+  while (curr.hasNext()) {
+    var edge = (AdjacentListEdge) curr.next().element();
+    if (edge.src.vertexPosition.element() == dst || edge.dst.vertexPosition.element() == dst) {
       return true;
     }
   }
@@ -226,12 +183,13 @@ public boolean areAdjacent(IVertex<V> v, IVertex<V> w) {
  * @param v The vertex whose element should be changed.
  * @param o The new element to store at this vertex.
  * @return The old element that was stored in {@code v} before this method was called.
- * If {@code v} is not valid, return {@code null}.
  */
 @Override
 public V replace(IVertex<V> v, V o) {
-  var vertex = (AdjVertex) v;
-  if (invalidVertex(vertex) || o == null) {
+  if (o == null) return null;
+
+  var vertex = (AdjacentListVertex) v;
+  if (vertexError(vertex)) {
     return null;
   }
   var old = vertex.element;
@@ -245,12 +203,13 @@ public V replace(IVertex<V> v, V o) {
  * @param e The edge whose element should be changed.
  * @param o The new element to store at this edge.
  * @return The old element that was stored in {@code e} before this method was called.
- * If {@code e} is not valid, return {@code null}.
  */
 @Override
 public E replace(IEdge<E> e, E o) {
-  var edge = (AdjEdge) e;
-  if (invalidEdge(edge) || o == null) {
+  if (o == null) return null;
+
+  var edge = (AdjacentListEdge) e;
+  if (edgeError(edge)) {
     return null;
   }
   var old = edge.element;
@@ -262,7 +221,7 @@ public E replace(IEdge<E> e, E o) {
  * Insert a new vertex into the graph. The element in the new vertex is given as parameter {@code o}.
  *
  * @param o The element to be stored in the new vertex.
- * @return The vertex that was created. If the vertex already exists, return the existing vertex.
+ * @return The vertex that was created.
  */
 @Override
 public IVertex<V> insertVertex(V o) {
@@ -270,14 +229,14 @@ public IVertex<V> insertVertex(V o) {
   if (o == null) {
     return null;
   }
-  var it = vertices.iterator();
-  while (it.hasNext()) {
-    var tmp = it.next();
+  var curr = vertices.iterator();
+  while (curr.hasNext()) {
+    var tmp = curr.next();
     if (tmp.element() == o) {
       return tmp;
     }
   }
-  var vertex = new AdjVertex(o);
+  var vertex = new AdjacentListVertex(o);
   vertex.vertexPosition = vertices.insertLast(vertex);
   return vertex;
 }
@@ -289,39 +248,39 @@ public IVertex<V> insertVertex(V o) {
  * @param v The first vertex to connect.
  * @param w The second vertex to connect.
  * @param o The element to store in this edge.
- * @return The new edge that is created. If {@code v} or {@code w} is not valid, then return null.
+ * @return The new edge that is created.
  */
 @Override
 public IEdge<E> insertEdge(IVertex<V> v, IVertex<V> w, E o) {
-  var src = (AdjVertex) v;
-  var dst = (AdjVertex) w;
+  if (o == null) return null;
+
+  var src = (AdjacentListVertex) v;
+  var dst = (AdjacentListVertex) w;
 
   // sanity check
-  if (invalidVertex(src) || invalidVertex(dst) || o == null) {
+  if (vertexError(src) || vertexError(dst)) {
     return null;
   }
 
   // self loop edge is not allowed
   if (v == w) {
-    throw new RuntimeException("self loop edge is not allowed");
+    throw new RuntimeException("self loop edge found");
   }
 
   // find if edge already exists
-  var edge = new AdjEdge(o, src, dst);
-  var it = src.edgePosition.iterator();
-  while (it.hasNext()) {
-    var tmp = it.next().element();
-    if (tmp.equals(edge)) {
-      throw new RuntimeException("parallel edge is not allowed");
+  var edge = new AdjacentListEdge(o, src, dst);
+  var curr = src.edgePosition.iterator();
+  while (curr.hasNext()) {
+    var tmp = curr.next();
+    if (tmp.element().equals(edge)) {
+      throw new RuntimeException("parallel edge found");
     }
   }
 
   // add to edge list
   edge.edgeIPosition = edges.insertLast(edge);
-
-  // add current edge to src and dst vertex
-  edge.meInSrcListPosition = src.edgePosition.insertLast(edge.edgeIPosition);
-  edge.meInDstListPosition = dst.edgePosition.insertLast(edge.edgeIPosition);
+  edge.src.edgePosition = src.edgePosition.insertLast(edge.edgeIPosition);
+  edge.dst.edgePosition = dst.edgePosition.insertLast(edge.edgeIPosition);
   return edge;
 }
 
@@ -330,27 +289,25 @@ public IEdge<E> insertEdge(IVertex<V> v, IVertex<V> w, E o) {
  *
  * @param v The vertex to be removed.
  * @return The element that was stored at that vertex before it was removed.
- * If {@code v} is not valid, return {@code null}.
  */
 @Override
 public V removeVertex(IVertex<V> v) {
-  var vertex = (AdjVertex) v;
+  var vertex = (AdjacentListVertex) v;
 
   // sanity check
-  if (invalidVertex(vertex)) {
+  if (vertexError(vertex)) {
     return null;
   }
 
-  var adjVertex = (AdjVertex) vertices.remove(vertex.vertexPosition);
+  var adjVertex = (AdjacentListVertex) vertices.remove(vertex.vertexPosition);
   assert adjVertex == vertex;
 
   // iterate over removed value and remove related edge
-  var it = adjVertex.edgePosition.iterator();
-  while (it.hasNext()) {
+  var curr = adjVertex.edgePosition.iterator();
+  while (curr.hasNext()) {
     // an edge that connected to this vertex
-    var edge = (AdjEdge) it.next().element();
-    if (edge == null) continue;
-    removeEdge(edge);
+    var edge = (AdjacentListEdge) curr.next().element();
+    if (edge != null) deleteEdge(edge);
   }
   return adjVertex.element();
 }
@@ -364,12 +321,12 @@ public V removeVertex(IVertex<V> v) {
 @Override
 public E removeEdge(IEdge<E> e) {
   // convert e to AdjEdge
-  var edge = (AdjEdge) e;
+  var edge = (AdjacentListEdge) e;
 
-  if (invalidEdge(edge)) {
+  if (edgeError(edge)) {
     return null;
   }
-  return removeEdge(edge);
+  return deleteEdge(edge);
 }
 
 /**
@@ -381,19 +338,18 @@ public E removeEdge(IEdge<E> e) {
  */
 @Override
 public IIterator<IEdge<E>> incidentEdges(IVertex<V> v) {
-  var vertex = (AdjVertex) v;
-  IList<IEdge<E>> ret = new DLinkedList<>();
+  var vertex = (AdjacentListVertex) v;
+  IList<IEdge<E>> result = new DLinkedList<>();
 
-  // return an empty iterator if vertex is not valid
-  if (invalidVertex(vertex)) {
-    return ret.iterator();
+  if (vertexError(vertex)) {
+    return result.iterator();
   }
 
   var it = vertex.edgePosition.iterator();
   while (it.hasNext()) {
-    ret.insertLast(it.next().element());
+    result.insertLast(it.next().element());
   }
-  return ret.iterator();
+  return result.iterator();
 }
 
 /**
@@ -416,96 +372,59 @@ public IIterator<IEdge<E>> edges() {
   return edges.iterator();
 }
 
-// helper function to get vertex count
 public int VertexCount() {
   return vertices.size();
 }
 
-// helper function to get edge count
 public int EdgeCount() {
   return edges.size();
 }
 
-private E removeEdge(AdjEdge edge) {
+private E deleteEdge(AdjacentListEdge edge) {
   // remove from src vertex
-  var src = (AdjVertex) edge.srcVertexPosition.element();
-  assert src.edgePosition.remove(edge.meInSrcListPosition).element() == edge;
+  var src = (AdjacentListVertex) edge.src.vertexPosition.element();
+  var srcElem = src.edgePosition.remove(edge.src.edgePosition).element();
+  assert srcElem == edge;
 
   // remove from dst vertex
-  var dst = (AdjVertex) edge.dstVertexPosition.element();
-  assert dst.edgePosition.remove(edge.meInDstListPosition).element() == edge;
+  var dst = (AdjacentListVertex) edge.dst.vertexPosition.element();
+  var dstElem = dst.edgePosition.remove(edge.dst.edgePosition).element();
+  assert dstElem == edge;
 
-  var adjEdge = (AdjEdge) edges.remove(edge.edgeIPosition);
-  assert adjEdge == edge;
-
+  var removed = (AdjacentListEdge) edges.remove(edge.edgeIPosition);
+  assert removed == edge;
   return edge.element();
 }
 
-// helper function to print graph
+
 @Override
 public String toString() {
   var sb = new StringBuilder();
-  sb.append("adjacent list:\n");
+  sb.append("Adjacency List:\n");
   var vertexIIterator = vertices.iterator();
   while (vertexIIterator.hasNext()) {
-    var vertex = (AdjVertex) vertexIIterator.next();
-    sb.append("vertex ");
-    sb.append(vertex.element());
-    sb.append(", connected edges: ");
-    sb.append("[");
-    var edgeIIterator = vertex.edgePosition.iterator();
+    var head =(AdjacentListVertex) vertexIIterator.next();
+    sb.append("Vertex ");
+    sb.append(head.element());
+    sb.append(": [");
+
+    var edge = head.edgePosition.iterator();
     var sep = "";
-    while (edgeIIterator.hasNext()) {
+    while (edge.hasNext()) {
       sb.append(sep);
-      sep = ",";
-      sb.append(edgeIIterator.next().element().element());
+      sb.append(edge.next().element().element());
+      sep = ", ";
     }
     sb.append("]\n");
   }
   return sb.toString();
 }
 
-// helper function to print graph in dot format
-// you can use `graphviz` to visualize the output
-// `sudo apt install graphviz`
-// `dot -Tpng -o graph.png graph.dot`
-public String toDot() {
-  var sb = new StringBuilder();
-  sb.append("graph G {\n");
-  // output vertex
-  {
-    var it = vertices.iterator();
-    while (it.hasNext()) {
-      var vertex = (AdjVertex) it.next();
-      sb.append(vertex.element());
-      sb.append(";\n");
-    }
-  }
-  // output edges
-  {
-    var it = edges.iterator();
-    while (it.hasNext()) {
-      var edge = (AdjEdge) it.next();
-      var src = edge.srcVertexPosition.element();
-      var dst = edge.dstVertexPosition.element();
-      sb.append(src.element());
-      sb.append(" -- ");
-      sb.append(dst.element());
-      sb.append(" [label=\"");
-      sb.append(edge.element());
-      sb.append("\"]");
-      sb.append(";\n");
-    }
-  }
-  sb.append("}\n");
-  return sb.toString();
-}
-
-private boolean invalidEdge(AdjEdge edge) {
+private boolean edgeError(AdjacentListEdge edge) {
   if (edge == null) return true;
-  var it = edges.iterator();
-  while (it.hasNext()) {
-    var tmp = (AdjEdge) it.next();
+  var curr = edges.iterator();
+  while (curr.hasNext()) {
+    var tmp = (AdjacentListEdge) curr.next();
     if (tmp.equals(edge)) {
       return false;
     }
@@ -513,10 +432,10 @@ private boolean invalidEdge(AdjEdge edge) {
   return true;
 }
 
-private boolean invalidVertex(AdjVertex vertex) {
-  var it = vertices.iterator();
-  while (it.hasNext()) {
-    var tmp = (AdjVertex) it.next();
+private boolean vertexError(AdjacentListVertex vertex) {
+  var curr = vertices.iterator();
+  while (curr.hasNext()) {
+    var tmp = (AdjacentListVertex) curr.next();
     if (tmp.equals(vertex)) {
       return false;
     }
@@ -524,4 +443,3 @@ private boolean invalidVertex(AdjVertex vertex) {
   return true;
 }
 }
-# 1
